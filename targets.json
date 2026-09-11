@@ -1,0 +1,7 @@
+[
+  {
+    "name": "VPN сервер",
+    "url": "https://vk.com/",
+    "expected_status": 200
+  }
+]
