@@ -3,14 +3,68 @@ import time
 import os
 import requests
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 TARGETS_FILE = "targets.json"
 HISTORY_FILE = "history.jsonl"
+STATE_FILE = "state.json"
 REQUEST_TIMEOUT = 5
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 def load_targets():
     with open(TARGETS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
+
+def load_state():
+    if not os.path.exists(STATE_FILE):
+        return {}
+    with open(STATE_FILE, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return {}
+
+def save_state(state):
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+def send_telegram_message(text):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️  Telegram не настроен, сообщение не отправлено:", text)
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code != 200:
+            print(f"⚠️  Ошибка Telegram: {response.status_code} {response.text}")
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️  Не удалось отправить в Telegram: {e}")
+
+def format_failure_alert(result):
+    msg = f"🔴 <b>Сервис недоступен</b>\n"
+    msg += f"<b>{result['service']}</b>\n"
+    msg += f"URL: {result['url']}\n"
+    if result["http_code"]:
+        msg += f"HTTP-код: {result['http_code']}\n"
+    if result["duration_ms"] is not None:
+        msg += f"Время ответа: {result['duration_ms']} мс\n"
+    if result["error"]:
+        msg += f"Причина: {result['error']}\n"
+    msg += f"Время: {result['timestamp']}"
+    return msg
+
+def format_recovery_alert(result):
+    msg = f"🟢 <b>Сервис восстановлен</b>\n"
+    msg += f"<b>{result['service']}</b>\n"
+    msg += f"URL: {result['url']}\n"
+    if result["duration_ms"] is not None:
+        msg += f"Время ответа: {result['duration_ms']} мс\n"
+    msg += f"Время: {result['timestamp']}"
+    return msg
 
 def check_service(target):
     name = target["name"]
@@ -32,7 +86,6 @@ def check_service(target):
     try:
         response = requests.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=True)
         duration_ms = round((time.time() - start) * 1000, 2)
-
         result["http_code"] = response.status_code
         result["duration_ms"] = duration_ms
 
@@ -44,7 +97,6 @@ def check_service(target):
             result["error"] = f"Строка '{check_content}' не найдена в ответе"
         else:
             result["status"] = "OK"
-
     except requests.exceptions.Timeout:
         result["status"] = "FAIL"
         result["error"] = f"Таймаут {REQUEST_TIMEOUT} сек"
@@ -79,6 +131,9 @@ def main():
         return
 
     targets = load_targets()
+    previous_state = load_state()
+    current_state = {}
+
     print(f"Проверяю {len(targets)} сервис(ов)...\n")
 
     for target in targets:
@@ -86,7 +141,24 @@ def main():
         append_to_history(result)
         print_result(result)
 
+        name = result["service"]
+        current_status = result["status"]
+        previous_status = previous_state.get(name)
+
+        if previous_status is None:
+            print(f"   (первая проверка {name}, статус: {current_status})")
+        elif previous_status == "OK" and current_status == "FAIL":
+            send_telegram_message(format_failure_alert(result))
+            print(f"   🔔 Алерт отправлен: {name} упал")
+        elif previous_status == "FAIL" and current_status == "OK":
+            send_telegram_message(format_recovery_alert(result))
+            print(f"   🔔 Алерт отправлен: {name} восстановлен")
+
+        current_state[name] = current_status
+
+    save_state(current_state)
     print(f"\nРезультаты записаны в {HISTORY_FILE}")
+    print(f"Состояние сохранено в {STATE_FILE}")
 
 if __name__ == "__main__":
     main()
