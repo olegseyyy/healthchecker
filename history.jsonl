@@ -80,3 +80,4 @@
 {"service": "VPN сервер", "url": "https://ru.willitrun.ru", "timestamp": "2026-09-21T10:56:34.382976", "status": "OK", "http_code": 200, "duration_ms": 821.53, "error": null}
 {"service": "VPN сервер", "url": "https://ru.willitrun.ru", "timestamp": "2026-09-21T16:48:04.901298", "status": "OK", "http_code": 200, "duration_ms": 679.94, "error": null}
 {"service": "VPN сервер", "url": "https://ru.willitrun.ru", "timestamp": "2026-09-21T20:45:39.578830", "status": "OK", "http_code": 200, "duration_ms": 889.19, "error": null}
+{"service": "VPN сервер", "url": "https://ru.willitrun.ru", "timestamp": "2026-09-21T23:47:21.949430", "status": "OK", "http_code": 200, "duration_ms": 933.6, "error": null}
